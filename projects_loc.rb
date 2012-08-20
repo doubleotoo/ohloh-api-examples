@@ -15,22 +15,22 @@ require 'rexml/document'
 #
 # Pass the project id of the project as the second parameter to this script.
 
-unless ARGV[0] =~ /[\w]+/
-  STDERR.puts "Usage: #{__FILE__} [api_key]"
+unless ARGV[0] =~ /[\w]+/ and ARGV[1] =~ /[\w]+/
+  STDERR.puts "Usage: #{__FILE__} [api_key] [language]"
   exit 1
 end
 
 $api_key = ARGV[0]
+$language = ARGV[1]
 
 def get_all_projects
   #
   # Connect to the Ohloh website and retrieve the account data.
   #
   http = Net::HTTP.new('www.ohloh.net', 80).start do |session|
-
     page = 1
     while page >= 1 # loops back to first page at end
-      response, data = session.get("/projects.xml?v=1&api_key=#{$api_key}&query=c&page=#{page}", nil)
+      response, data = session.get("/projects.xml?v=1&api_key=#{$api_key}&query=#{$language}&page=#{page}", nil)
 
       # HTTP OK?
       if response.code != '200'
@@ -60,13 +60,16 @@ def get_all_projects
       # Output all the immediate child properties of an Account
       # parent.each_child{ |child| # Do something with child }
       xml.root.get_elements('/response/result/project').each do |project|
-        project_id = project_name = nil
+        project_id = project_name = homepage_url = nil
         project.each_element_with_text do |element|
           project_id    = element.text    if element.name == "id"
           project_name  = element.text    if element.name == "name"
+          homepage_url  = element.text    if element.name == "homepage_url"
         end
-        print "#{project_id} #{project_name} "
-        get_loc(project_id)
+        loc = get_loc(project_id)
+        if loc != -1
+          puts "id=#{project_id} name=#{project_name} loc=#{loc} language=#{$language} homepage_url=#{homepage_url}"
+        end
       end
       page += 1
     end
@@ -99,7 +102,14 @@ def get_loc(project_id)
 
     # Output all the immediate child properties of an Account
     xml.root.get_elements('/response/result/analysis').first.each_element do |element|
-      puts element.text if element.name == "total_code_lines"
+      if element.name == "total_code_lines"
+        loc = Integer(element.text)
+        if loc > 90000 and loc < 130000
+          return loc
+        else
+          return -1
+        end
+      end
     end
   end
 end
